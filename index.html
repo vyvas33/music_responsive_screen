@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Music Responsive Webscreen</title>
+  <title>Music Responsive Webscreen (Single Color, Translucent File Input)</title>
   <style>
     /* Basic reset */
     * {
@@ -25,7 +25,7 @@
       padding: 10px;
     }
 
-    /* Smaller icon-like buttons */
+    /* Icon-like buttons */
     button {
       background: none;
       border: none;
@@ -44,14 +44,27 @@
       cursor: not-allowed;
     }
 
-    /* File input */
+    /* Translucent File Input */
     #fileInput {
-      background: #fff;
-      color: #000;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      font-size: 14px;
       padding: 6px;
       cursor: pointer;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+    #fileInput:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    /* Make the default "Choose File" button match styling (for Chromium-based browsers) */
+    #fileInput::-webkit-file-upload-button {
+      cursor: pointer;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 14px;
     }
 
     /* Range sliders (track position & threshold) */
@@ -86,12 +99,31 @@
     }
     #thresholdInput {
       width: 60px;
-      background: #fff;
-      color: #000;
-      border: 1px solid #ccc;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.3);
       border-radius: 4px;
       padding: 4px;
       margin-top: 4px;
+      transition: background 0.2s;
+    }
+    #thresholdInput:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Translucent Color Picker */
+    #colorInput {
+      width: 50px;
+      height: 30px;
+      margin-top: 4px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.1);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #colorInput:hover {
+      background: rgba(255, 255, 255, 0.2);
     }
 
     /* Position slider container so it lines up nicely in the controls */
@@ -108,7 +140,7 @@
 <body>
 
   <div id="controls">
-    <!-- File Input -->
+    <!-- Translucent File Input -->
     <input type="file" id="fileInput" accept="audio/*">
 
     <!-- Buttons -->
@@ -127,6 +159,12 @@
       Threshold
       <input type="number" id="thresholdInput" value="20" min="0" max="255">
     </label>
+
+    <!-- Translucent Color Input -->
+    <label>
+      Flicker Color
+      <input type="color" id="colorInput" value="#ff0000">
+    </label>
   </div>
 
   <!-- Hidden audio element -->
@@ -137,23 +175,20 @@
     let analyser;
     let audioSource;
     let audioInitialized = false;
-    let threshold = 20; // Default threshold
 
-    const fileInput       = document.getElementById('fileInput');
-    const audioEl         = document.getElementById('audio');
-    const startBtn        = document.getElementById('startBtn');
-    const pauseBtn        = document.getElementById('pauseBtn');
-    const restartBtn      = document.getElementById('restartBtn');
-    const thresholdInput  = document.getElementById('thresholdInput');
-    const trackSlider     = document.getElementById('trackSlider');
+    // Default threshold and color
+    let threshold = 20;
+    let flickerColor = '#ff0000';
 
-    // Optional: color schedule for different parts of the song (in seconds)
-    const colorSchedule = [
-      { start: 0,   end: 10,  color: 'red'   },
-      { start: 10,  end: 20,  color: 'blue'  },
-      { start: 20,  end: 30,  color: 'green' },
-      { start: 30,  end: 999, color: 'purple'}
-    ];
+    // DOM elements
+    const fileInput      = document.getElementById('fileInput');
+    const audioEl        = document.getElementById('audio');
+    const startBtn       = document.getElementById('startBtn');
+    const pauseBtn       = document.getElementById('pauseBtn');
+    const restartBtn     = document.getElementById('restartBtn');
+    const thresholdInput = document.getElementById('thresholdInput');
+    const colorInput     = document.getElementById('colorInput');
+    const trackSlider    = document.getElementById('trackSlider');
 
     // 1. Load audio from file input
     fileInput.addEventListener('change', (event) => {
@@ -212,26 +247,16 @@
       }
       const rms = Math.sqrt(sum / bufferLength);
 
-      // Determine color based on schedule
-      const currentTime = audioEl.currentTime;
-      const scheduledColor = getColorForTime(currentTime);
-
       // Flicker if above threshold
-      document.body.style.backgroundColor = (rms > threshold) ? scheduledColor : 'black';
+      document.body.style.backgroundColor = (rms > threshold) ? flickerColor : 'black';
     }
 
-    function getColorForTime(time) {
-      for (const range of colorSchedule) {
-        if (time >= range.start && time < range.end) {
-          return range.color;
-        }
-      }
-      return 'white'; // fallback
-    }
-
-    // 4. Threshold input changes
+    // 4. Threshold & Color input changes
     thresholdInput.addEventListener('input', () => {
       threshold = parseInt(thresholdInput.value, 10) || 0;
+    });
+    colorInput.addEventListener('input', () => {
+      flickerColor = colorInput.value;
     });
 
     // 5. Button handlers
@@ -258,12 +283,9 @@
     });
 
     // 6. Track slider scrubbing
-    // Keep slider in sync with audio time
     audioEl.addEventListener('timeupdate', () => {
       trackSlider.value = audioEl.currentTime;
     });
-
-    // If user drags the track slider, update the audio time
     trackSlider.addEventListener('input', () => {
       if (!audioInitialized) return;
       audioEl.currentTime = parseFloat(trackSlider.value);
