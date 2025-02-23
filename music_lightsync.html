@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FlickerBeats (Minimal)</title>
+  <style>
+    /* Basic reset */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background-color: black;
+      font-family: sans-serif;
+      color: white;
+    }
+
+    /* A translucent control bar at the top */
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.1); /* translucent */
+      padding: 10px;
+    }
+
+    /* Smaller icon-like buttons */
+    button {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* File input */
+    #fileInput {
+      background: #fff;
+      color: #000;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 6px;
+      cursor: pointer;
+    }
+
+    /* Range sliders (track position & threshold) */
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 120px;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 14px;
+      width: 14px;
+      border-radius: 50%;
+      background: white;
+      border: 1px solid #888;
+      margin-top: -5px;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      background: rgba(255,255,255,0.4);
+      border-radius: 2px;
+    }
+
+    /* Labels */
+    label {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      font-size: 12px;
+      color: #fff;
+    }
+    #thresholdInput {
+      width: 60px;
+      background: #fff;
+      color: #000;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 4px;
+      margin-top: 4px;
+    }
+
+    /* Position slider container so it lines up nicely in the controls */
+    #trackSliderContainer {
+      display: flex;
+      flex-direction: column;
+      font-size: 12px;
+    }
+    #trackSliderLabel {
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="controls">
+    <!-- File Input -->
+    <input type="file" id="fileInput" accept="audio/*">
+
+    <!-- Buttons -->
+    <button id="startBtn" disabled>▶︎</button>
+    <button id="pauseBtn" disabled>⏸</button>
+    <button id="restartBtn" disabled>↺</button>
+
+    <!-- Track Slider -->
+    <div id="trackSliderContainer">
+      <span id="trackSliderLabel">Track</span>
+      <input type="range" id="trackSlider" value="0" min="0" step="0.01">
+    </div>
+
+    <!-- Threshold Input -->
+    <label>
+      Threshold
+      <input type="number" id="thresholdInput" value="20" min="0" max="255">
+    </label>
+  </div>
+
+  <!-- Hidden audio element -->
+  <audio id="audio" crossorigin="anonymous"></audio>
+
+  <script>
+    let audioContext;
+    let analyser;
+    let audioSource;
+    let audioInitialized = false;
+    let threshold = 20; // Default threshold
+
+    const fileInput       = document.getElementById('fileInput');
+    const audioEl         = document.getElementById('audio');
+    const startBtn        = document.getElementById('startBtn');
+    const pauseBtn        = document.getElementById('pauseBtn');
+    const restartBtn      = document.getElementById('restartBtn');
+    const thresholdInput  = document.getElementById('thresholdInput');
+    const trackSlider     = document.getElementById('trackSlider');
+
+    // Optional: color schedule for different parts of the song (in seconds)
+    const colorSchedule = [
+      { start: 0,   end: 10,  color: 'red'   },
+      { start: 10,  end: 20,  color: 'blue'  },
+      { start: 20,  end: 30,  color: 'green' },
+      { start: 30,  end: 999, color: 'purple'}
+    ];
+
+    // 1. Load audio from file input
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const url = URL.createObjectURL(file);
+      audioEl.src = url;
+
+      audioInitialized = true;
+
+      // Enable buttons
+      startBtn.disabled = false;
+      pauseBtn.disabled = false;
+      restartBtn.disabled = false;
+
+      // When the audio metadata is loaded, set the track slider max to the duration
+      audioEl.addEventListener('loadedmetadata', () => {
+        trackSlider.max = audioEl.duration.toFixed(2);
+      });
+
+      // Set up audio processing if not already set
+      setupAudioProcessing();
+    });
+
+    // 2. Set up audio context and analyser
+    function setupAudioProcessing() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (!analyser) {
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+      }
+      if (!audioSource) {
+        audioSource = audioContext.createMediaElementSource(audioEl);
+        audioSource.connect(analyser);
+        analyser.connect(audioContext.destination);
+      }
+      animate();
+    }
+
+    // 3. Animation loop for amplitude-based flicker
+    function animate() {
+      requestAnimationFrame(animate);
+      if (!analyser) return;
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteTimeDomainData(dataArray);
+
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const val = dataArray[i] - 128; // shift range to -128..127
+        sum += val * val;
+      }
+      const rms = Math.sqrt(sum / bufferLength);
+
+      // Determine color based on schedule
+      const currentTime = audioEl.currentTime;
+      const scheduledColor = getColorForTime(currentTime);
+
+      // Flicker if above threshold
+      document.body.style.backgroundColor = (rms > threshold) ? scheduledColor : 'black';
+    }
+
+    function getColorForTime(time) {
+      for (const range of colorSchedule) {
+        if (time >= range.start && time < range.end) {
+          return range.color;
+        }
+      }
+      return 'white'; // fallback
+    }
+
+    // 4. Threshold input changes
+    thresholdInput.addEventListener('input', () => {
+      threshold = parseInt(thresholdInput.value, 10) || 0;
+    });
+
+    // 5. Button handlers
+    startBtn.addEventListener('click', () => {
+      if (!audioInitialized) return;
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      audioEl.play();
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      if (!audioInitialized) return;
+      audioEl.pause();
+    });
+
+    restartBtn.addEventListener('click', () => {
+      if (!audioInitialized) return;
+      audioEl.currentTime = 0;
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      audioEl.play();
+    });
+
+    // 6. Track slider scrubbing
+    // Keep slider in sync with audio time
+    audioEl.addEventListener('timeupdate', () => {
+      trackSlider.value = audioEl.currentTime;
+    });
+
+    // If user drags the track slider, update the audio time
+    trackSlider.addEventListener('input', () => {
+      if (!audioInitialized) return;
+      audioEl.currentTime = parseFloat(trackSlider.value);
+    });
+  </script>
+</body>
+</html>
