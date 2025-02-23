@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Music Responsive Webscreen (File & Mic Modes)</title>
+  <title>Audio Reactive (File & Mic Modes)</title>
   <style>
     /* Basic reset */
     * {
@@ -14,23 +14,21 @@
       font-family: sans-serif;
       color: white;
     }
-
-    /* A translucent control bar at the top */
+    /* Translucent control bar */
     #controls {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 10px;
-      background: rgba(255, 255, 255, 0.1); /* translucent */
-      padding: 10px;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 8px;
     }
-
-    /* Icon-like buttons */
+    /* Small icon buttons for mode switching */
     button {
       background: none;
       border: none;
       color: white;
-      font-size: 16px;
+      font-size: 18px;
       cursor: pointer;
       padding: 6px 10px;
       border-radius: 4px;
@@ -43,11 +41,10 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
-
     /* Translucent File Input */
     #fileInput {
-      font-size: 14px;
-      padding: 6px;
+      font-size: 12px;
+      padding: 4px 6px;
       cursor: pointer;
       color: #fff;
       background: rgba(255, 255, 255, 0.1);
@@ -58,85 +55,65 @@
     #fileInput:hover {
       background: rgba(255, 255, 255, 0.2);
     }
-    /* Make the default "Choose File" button match styling (for Chromium-based browsers) */
+    /* Make "Choose File" match style (Chromium browsers) */
     #fileInput::-webkit-file-upload-button {
       cursor: pointer;
       background: none;
       border: none;
       color: #fff;
-      font-size: 14px;
+      font-size: 12px;
     }
-
     /* Range sliders (track position & threshold) */
     input[type="range"] {
       -webkit-appearance: none;
-      width: 120px;
+      width: 100px;
       background: transparent;
       cursor: pointer;
     }
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      height: 14px;
-      width: 14px;
+      height: 12px;
+      width: 12px;
       border-radius: 50%;
       background: white;
       border: 1px solid #888;
-      margin-top: -5px;
+      margin-top: -4px;
     }
     input[type="range"]::-webkit-slider-runnable-track {
-      height: 4px;
+      height: 3px;
       background: rgba(255,255,255,0.4);
       border-radius: 2px;
     }
-
-    /* Labels */
-    label {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      font-size: 12px;
-      color: #fff;
-    }
+    /* Compact threshold input (no label) */
     #thresholdInput {
-      width: 60px;
+      width: 48px;
       background: rgba(255, 255, 255, 0.1);
       color: #fff;
       border: 1px solid rgba(255, 255, 255, 0.3);
       border-radius: 4px;
       padding: 4px;
-      margin-top: 4px;
-      transition: background 0.2s;
+      font-size: 12px;
+      text-align: center;
     }
-    #thresholdInput:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-
-    /* Translucent Color Picker */
+    /* Circular color picker (no label) */
     #colorInput {
-      width: 50px;
-      height: 30px;
-      margin-top: 4px;
-      border-radius: 4px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
       border: 1px solid rgba(255, 255, 255, 0.3);
       background: rgba(255, 255, 255, 0.1);
       cursor: pointer;
-      transition: background 0.2s;
+      padding: 0;
     }
-    #colorInput:hover {
-      background: rgba(255, 255, 255, 0.2);
+    #colorInput::-webkit-color-swatch-wrapper {
+      padding: 0;
+      border-radius: 50%;
     }
-
-    /* Position slider container so it lines up nicely in the controls */
-    #trackSliderContainer {
-      display: flex;
-      flex-direction: column;
-      font-size: 12px;
+    #colorInput::-webkit-color-swatch {
+      border: none;
+      border-radius: 50%;
     }
-    #trackSliderLabel {
-      margin-bottom: 4px;
-    }
-
-    /* Hide these elements when in mic mode */
+    /* Hide file-mode elements in mic mode */
     .file-only {
       display: none;
     }
@@ -145,95 +122,76 @@
 <body>
 
   <div id="controls">
-    <!-- Mode Buttons -->
-    <button id="fileModeBtn">File Mode</button>
-    <button id="micModeBtn">Mic Mode</button>
+    <!-- Mode Buttons: file (📁), mic (🎤) -->
+    <button id="fileModeBtn">📁</button>
+    <button id="micModeBtn">🎤</button>
 
-    <!-- Translucent File Input (File Mode Only) -->
+    <!-- File Input + Buttons + Slider (File Mode Only) -->
     <input type="file" id="fileInput" accept="audio/*" class="file-only">
-
-    <!-- Buttons (File Mode Only) -->
     <button id="startBtn" class="file-only" disabled>▶︎</button>
     <button id="pauseBtn" class="file-only" disabled>⏸</button>
     <button id="restartBtn" class="file-only" disabled>↺</button>
+    <input type="range" id="trackSlider" value="0" min="0" step="0.01" class="file-only">
 
-    <!-- Track Slider (File Mode Only) -->
-    <div id="trackSliderContainer" class="file-only">
-      <span id="trackSliderLabel">Track</span>
-      <input type="range" id="trackSlider" value="0" min="0" step="0.01">
-    </div>
-
-    <!-- Threshold & Color (Applies to Both) -->
-    <label>
-      Threshold
-      <input type="number" id="thresholdInput" value="20" min="0" max="255">
-    </label>
-    <label>
-      Flicker Color
-      <input type="color" id="colorInput" value="#ff0000">
-    </label>
+    <!-- Threshold & Color (Apply to both modes) -->
+    <input type="number" id="thresholdInput" value="20" min="0" max="255" title="Threshold">
+    <input type="color" id="colorInput" value="#ff0000" title="Flicker Color">
   </div>
 
   <!-- Hidden audio element (File Mode) -->
   <audio id="audio" crossorigin="anonymous"></audio>
 
   <script>
-    /*====================================
+    /*===============================
      * Global State & DOM Elements
-     *====================================*/
+     *===============================*/
     let audioContext;
-    let currentAnalyser = null;  // We'll swap out depending on mode
+    let currentAnalyser = null;  // We'll swap depending on mode
 
-    // FILE MODE variables
-    let fileAnalyser = null;
-    let fileSource   = null;
-    let fileInitialized = false;
+    // FILE MODE
+    let fileAnalyser      = null;
+    let fileSource        = null;
+    let fileInitialized   = false;
 
-    // MIC MODE variables
-    let micAnalyser = null;
-    let micStream   = null;
-    let micActive   = false;
+    // MIC MODE
+    let micAnalyser       = null;
+    let micStream         = null;
+    let micActive         = false;
 
     // Flicker config
-    let threshold    = 20;
-    let flickerColor = '#ff0000';
+    let threshold         = 20;
+    let flickerColor      = '#ff0000';
 
-    // DOM elements
-    const fileModeBtn    = document.getElementById('fileModeBtn');
-    const micModeBtn     = document.getElementById('micModeBtn');
-    const fileInput      = document.getElementById('fileInput');
-    const audioEl        = document.getElementById('audio');
-    const startBtn       = document.getElementById('startBtn');
-    const pauseBtn       = document.getElementById('pauseBtn');
-    const restartBtn     = document.getElementById('restartBtn');
-    const trackSlider    = document.getElementById('trackSlider');
-    const thresholdInput = document.getElementById('thresholdInput');
-    const colorInput     = document.getElementById('colorInput');
+    // DOM
+    const fileModeBtn     = document.getElementById('fileModeBtn');
+    const micModeBtn      = document.getElementById('micModeBtn');
+    const fileInput       = document.getElementById('fileInput');
+    const audioEl         = document.getElementById('audio');
+    const startBtn        = document.getElementById('startBtn');
+    const pauseBtn        = document.getElementById('pauseBtn');
+    const restartBtn      = document.getElementById('restartBtn');
+    const trackSlider     = document.getElementById('trackSlider');
+    const thresholdInput  = document.getElementById('thresholdInput');
+    const colorInput      = document.getElementById('colorInput');
 
-    /*====================================
-     * MODE SWITCHING
-     *====================================*/
-    fileModeBtn.addEventListener('click', () => {
-      switchToFileMode();
-    });
-    micModeBtn.addEventListener('click', () => {
-      switchToMicMode();
-    });
+    /*===============================
+     * Mode Switching
+     *===============================*/
+    fileModeBtn.addEventListener('click', switchToFileMode);
+    micModeBtn.addEventListener('click', switchToMicMode);
 
     function switchToFileMode() {
       micActive = false;
       hideMicUI();
       showFileUI();
       currentAnalyser = fileAnalyser || null;
+      // Pause mic if active
+      // (Not strictly necessary, but optional if you'd like to free up resources)
     }
 
     async function switchToMicMode() {
-      // Pause file if playing
-      audioEl.pause();
-      // Hide file UI
+      audioEl.pause(); // Stop file playback
       hideFileUI();
-
-      // If we haven't started mic mode yet, request access:
       if (!micAnalyser) {
         await enableMicrophone();
       }
@@ -247,27 +205,23 @@
         el.style.display = 'inline-flex';
       });
     }
-
     function hideFileUI() {
       document.querySelectorAll('.file-only').forEach(el => {
         el.style.display = 'none';
       });
     }
-
     function showMicUI() {
-      // Currently, we don't have separate mic-only elements
-      // but we might, so you could unhide them here if needed
+      // If you had separate mic-only UI, reveal it here
     }
-
     function hideMicUI() {
-      // If you had separate mic UI, hide it here
+      // If you had separate mic-only UI, hide it here
     }
 
-    /*====================================
-     * FILE MODE SETUP
-     *====================================*/
-    fileInput.addEventListener('change', (event) => {
-      const file = event.target.files[0];
+    /*===============================
+     * File Mode Setup
+     *===============================*/
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
       if (!file) return;
       fileInitialized = true;
 
@@ -279,17 +233,14 @@
       pauseBtn.disabled   = false;
       restartBtn.disabled = false;
 
-      // Set up file-based analyser if not set
       setupFileAnalyser();
 
-      // Update track slider max when metadata loads
       audioEl.addEventListener('loadedmetadata', () => {
         trackSlider.max = audioEl.duration.toFixed(2);
       });
     });
 
     function setupFileAnalyser() {
-      // Create or reuse the AudioContext
       if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
       }
@@ -302,13 +253,12 @@
         fileSource.connect(fileAnalyser);
         fileAnalyser.connect(audioContext.destination);
       }
-      // Use the file analyser if we're in file mode
       if (!micActive) {
         currentAnalyser = fileAnalyser;
       }
     }
 
-    // File-mode buttons
+    // File control buttons
     startBtn.addEventListener('click', () => {
       if (!fileInitialized) return;
       if (audioContext.state === 'suspended') {
@@ -316,12 +266,10 @@
       }
       audioEl.play();
     });
-
     pauseBtn.addEventListener('click', () => {
       if (!fileInitialized) return;
       audioEl.pause();
     });
-
     restartBtn.addEventListener('click', () => {
       if (!fileInitialized) return;
       audioEl.currentTime = 0;
@@ -331,7 +279,7 @@
       audioEl.play();
     });
 
-    // Track slider scrubbing
+    // Track slider
     audioEl.addEventListener('timeupdate', () => {
       trackSlider.value = audioEl.currentTime;
     });
@@ -340,16 +288,14 @@
       audioEl.currentTime = parseFloat(trackSlider.value);
     });
 
-
-    /*====================================
-     * MIC MODE SETUP
-     *====================================*/
+    /*===============================
+     * Mic Mode Setup
+     *===============================*/
     async function enableMicrophone() {
       try {
         if (!audioContext) {
           audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
-        // Request access
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         micAnalyser = audioContext.createAnalyser();
         micAnalyser.fftSize = 256;
@@ -362,9 +308,9 @@
       }
     }
 
-    /*====================================
-     * THRESHOLD & COLOR
-     *====================================*/
+    /*===============================
+     * Threshold & Color
+     *===============================*/
     thresholdInput.addEventListener('input', () => {
       threshold = parseInt(thresholdInput.value, 10) || 0;
     });
@@ -372,12 +318,12 @@
       flickerColor = colorInput.value;
     });
 
-    /*====================================
-     * ANIMATION LOOP
-     *====================================*/
+    /*===============================
+     * Animation Loop
+     *===============================*/
     function animate() {
       requestAnimationFrame(animate);
-      if (!currentAnalyser) return; // No active analyser? Do nothing.
+      if (!currentAnalyser) return;
 
       const bufferLength = currentAnalyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
@@ -385,7 +331,7 @@
 
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) {
-        const val = dataArray[i] - 128; // shift from 0..255 to -128..127
+        const val = dataArray[i] - 128; 
         sum += val * val;
       }
       const rms = Math.sqrt(sum / bufferLength);
@@ -393,15 +339,12 @@
       // Flicker if above threshold
       document.body.style.backgroundColor = (rms > threshold) ? flickerColor : 'black';
     }
-
-    // Start the animation loop once
     animate();
 
-    /*====================================
-     * DEFAULT MODE
-     *====================================*/
-    // We'll start in File Mode by default
-    switchToFileMode();
+    /*===============================
+     * Default Mode
+     *===============================*/
+    switchToFileMode(); // Start in file mode
   </script>
 </body>
 </html>
