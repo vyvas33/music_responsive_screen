@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Music Responsive Webscreen</title>
+  <title>Music Responsive Webscreen (File & Mic Modes)</title>
   <style>
     /* Basic reset */
     * {
@@ -30,7 +30,7 @@
       background: none;
       border: none;
       color: white;
-      font-size: 18px;
+      font-size: 16px;
       cursor: pointer;
       padding: 6px 10px;
       border-radius: 4px;
@@ -135,114 +135,257 @@
     #trackSliderLabel {
       margin-bottom: 4px;
     }
+
+    /* Hide these elements when in mic mode */
+    .file-only {
+      display: none;
+    }
   </style>
 </head>
 <body>
 
   <div id="controls">
-    <!-- Translucent File Input -->
-    <input type="file" id="fileInput" accept="audio/*">
+    <!-- Mode Buttons -->
+    <button id="fileModeBtn">File Mode</button>
+    <button id="micModeBtn">Mic Mode</button>
 
-    <!-- Buttons -->
-    <button id="startBtn" disabled>▶︎</button>
-    <button id="pauseBtn" disabled>⏸</button>
-    <button id="restartBtn" disabled>↺</button>
+    <!-- Translucent File Input (File Mode Only) -->
+    <input type="file" id="fileInput" accept="audio/*" class="file-only">
 
-    <!-- Track Slider -->
-    <div id="trackSliderContainer">
+    <!-- Buttons (File Mode Only) -->
+    <button id="startBtn" class="file-only" disabled>▶︎</button>
+    <button id="pauseBtn" class="file-only" disabled>⏸</button>
+    <button id="restartBtn" class="file-only" disabled>↺</button>
+
+    <!-- Track Slider (File Mode Only) -->
+    <div id="trackSliderContainer" class="file-only">
       <span id="trackSliderLabel">Track</span>
       <input type="range" id="trackSlider" value="0" min="0" step="0.01">
     </div>
 
-    <!-- Threshold Input -->
+    <!-- Threshold & Color (Applies to Both) -->
     <label>
       Threshold
       <input type="number" id="thresholdInput" value="20" min="0" max="255">
     </label>
-
-    <!-- Translucent Color Input -->
     <label>
       Flicker Color
       <input type="color" id="colorInput" value="#ff0000">
     </label>
   </div>
 
-  <!-- Hidden audio element -->
+  <!-- Hidden audio element (File Mode) -->
   <audio id="audio" crossorigin="anonymous"></audio>
 
   <script>
+    /*====================================
+     * Global State & DOM Elements
+     *====================================*/
     let audioContext;
-    let analyser;
-    let audioSource;
-    let audioInitialized = false;
+    let currentAnalyser = null;  // We'll swap out depending on mode
 
-    // Default threshold and color
-    let threshold = 20;
+    // FILE MODE variables
+    let fileAnalyser = null;
+    let fileSource   = null;
+    let fileInitialized = false;
+
+    // MIC MODE variables
+    let micAnalyser = null;
+    let micStream   = null;
+    let micActive   = false;
+
+    // Flicker config
+    let threshold    = 20;
     let flickerColor = '#ff0000';
 
     // DOM elements
+    const fileModeBtn    = document.getElementById('fileModeBtn');
+    const micModeBtn     = document.getElementById('micModeBtn');
     const fileInput      = document.getElementById('fileInput');
     const audioEl        = document.getElementById('audio');
     const startBtn       = document.getElementById('startBtn');
     const pauseBtn       = document.getElementById('pauseBtn');
     const restartBtn     = document.getElementById('restartBtn');
+    const trackSlider    = document.getElementById('trackSlider');
     const thresholdInput = document.getElementById('thresholdInput');
     const colorInput     = document.getElementById('colorInput');
-    const trackSlider    = document.getElementById('trackSlider');
 
-    // 1. Load audio from file input
+    /*====================================
+     * MODE SWITCHING
+     *====================================*/
+    fileModeBtn.addEventListener('click', () => {
+      switchToFileMode();
+    });
+    micModeBtn.addEventListener('click', () => {
+      switchToMicMode();
+    });
+
+    function switchToFileMode() {
+      micActive = false;
+      hideMicUI();
+      showFileUI();
+      currentAnalyser = fileAnalyser || null;
+    }
+
+    async function switchToMicMode() {
+      // Pause file if playing
+      audioEl.pause();
+      // Hide file UI
+      hideFileUI();
+
+      // If we haven't started mic mode yet, request access:
+      if (!micAnalyser) {
+        await enableMicrophone();
+      }
+      micActive = true;
+      showMicUI();
+      currentAnalyser = micAnalyser || null;
+    }
+
+    function showFileUI() {
+      document.querySelectorAll('.file-only').forEach(el => {
+        el.style.display = 'inline-flex';
+      });
+    }
+
+    function hideFileUI() {
+      document.querySelectorAll('.file-only').forEach(el => {
+        el.style.display = 'none';
+      });
+    }
+
+    function showMicUI() {
+      // Currently, we don't have separate mic-only elements
+      // but we might, so you could unhide them here if needed
+    }
+
+    function hideMicUI() {
+      // If you had separate mic UI, hide it here
+    }
+
+    /*====================================
+     * FILE MODE SETUP
+     *====================================*/
     fileInput.addEventListener('change', (event) => {
       const file = event.target.files[0];
       if (!file) return;
+      fileInitialized = true;
 
       const url = URL.createObjectURL(file);
       audioEl.src = url;
 
-      audioInitialized = true;
-
-      // Enable buttons
-      startBtn.disabled = false;
-      pauseBtn.disabled = false;
+      // Enable file-control buttons
+      startBtn.disabled   = false;
+      pauseBtn.disabled   = false;
       restartBtn.disabled = false;
 
-      // When the audio metadata is loaded, set the track slider max to the duration
+      // Set up file-based analyser if not set
+      setupFileAnalyser();
+
+      // Update track slider max when metadata loads
       audioEl.addEventListener('loadedmetadata', () => {
         trackSlider.max = audioEl.duration.toFixed(2);
       });
-
-      // Set up audio processing if not already set
-      setupAudioProcessing();
     });
 
-    // 2. Set up audio context and analyser
-    function setupAudioProcessing() {
+    function setupFileAnalyser() {
+      // Create or reuse the AudioContext
       if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
       }
-      if (!analyser) {
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
+      if (!fileAnalyser) {
+        fileAnalyser = audioContext.createAnalyser();
+        fileAnalyser.fftSize = 256;
       }
-      if (!audioSource) {
-        audioSource = audioContext.createMediaElementSource(audioEl);
-        audioSource.connect(analyser);
-        analyser.connect(audioContext.destination);
+      if (!fileSource) {
+        fileSource = audioContext.createMediaElementSource(audioEl);
+        fileSource.connect(fileAnalyser);
+        fileAnalyser.connect(audioContext.destination);
       }
-      animate();
+      // Use the file analyser if we're in file mode
+      if (!micActive) {
+        currentAnalyser = fileAnalyser;
+      }
     }
 
-    // 3. Animation loop for amplitude-based flicker
+    // File-mode buttons
+    startBtn.addEventListener('click', () => {
+      if (!fileInitialized) return;
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      audioEl.play();
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      if (!fileInitialized) return;
+      audioEl.pause();
+    });
+
+    restartBtn.addEventListener('click', () => {
+      if (!fileInitialized) return;
+      audioEl.currentTime = 0;
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      audioEl.play();
+    });
+
+    // Track slider scrubbing
+    audioEl.addEventListener('timeupdate', () => {
+      trackSlider.value = audioEl.currentTime;
+    });
+    trackSlider.addEventListener('input', () => {
+      if (!fileInitialized) return;
+      audioEl.currentTime = parseFloat(trackSlider.value);
+    });
+
+
+    /*====================================
+     * MIC MODE SETUP
+     *====================================*/
+    async function enableMicrophone() {
+      try {
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        // Request access
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micAnalyser = audioContext.createAnalyser();
+        micAnalyser.fftSize = 256;
+
+        const source = audioContext.createMediaStreamSource(micStream);
+        source.connect(micAnalyser);
+
+      } catch (err) {
+        console.error('Microphone access denied or not available.', err);
+      }
+    }
+
+    /*====================================
+     * THRESHOLD & COLOR
+     *====================================*/
+    thresholdInput.addEventListener('input', () => {
+      threshold = parseInt(thresholdInput.value, 10) || 0;
+    });
+    colorInput.addEventListener('input', () => {
+      flickerColor = colorInput.value;
+    });
+
+    /*====================================
+     * ANIMATION LOOP
+     *====================================*/
     function animate() {
       requestAnimationFrame(animate);
-      if (!analyser) return;
+      if (!currentAnalyser) return; // No active analyser? Do nothing.
 
-      const bufferLength = analyser.frequencyBinCount;
+      const bufferLength = currentAnalyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
-      analyser.getByteTimeDomainData(dataArray);
+      currentAnalyser.getByteTimeDomainData(dataArray);
 
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) {
-        const val = dataArray[i] - 128; // shift range to -128..127
+        const val = dataArray[i] - 128; // shift from 0..255 to -128..127
         sum += val * val;
       }
       const rms = Math.sqrt(sum / bufferLength);
@@ -251,45 +394,14 @@
       document.body.style.backgroundColor = (rms > threshold) ? flickerColor : 'black';
     }
 
-    // 4. Threshold & Color input changes
-    thresholdInput.addEventListener('input', () => {
-      threshold = parseInt(thresholdInput.value, 10) || 0;
-    });
-    colorInput.addEventListener('input', () => {
-      flickerColor = colorInput.value;
-    });
+    // Start the animation loop once
+    animate();
 
-    // 5. Button handlers
-    startBtn.addEventListener('click', () => {
-      if (!audioInitialized) return;
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      audioEl.play();
-    });
-
-    pauseBtn.addEventListener('click', () => {
-      if (!audioInitialized) return;
-      audioEl.pause();
-    });
-
-    restartBtn.addEventListener('click', () => {
-      if (!audioInitialized) return;
-      audioEl.currentTime = 0;
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      audioEl.play();
-    });
-
-    // 6. Track slider scrubbing
-    audioEl.addEventListener('timeupdate', () => {
-      trackSlider.value = audioEl.currentTime;
-    });
-    trackSlider.addEventListener('input', () => {
-      if (!audioInitialized) return;
-      audioEl.currentTime = parseFloat(trackSlider.value);
-    });
+    /*====================================
+     * DEFAULT MODE
+     *====================================*/
+    // We'll start in File Mode by default
+    switchToFileMode();
   </script>
 </body>
 </html>
